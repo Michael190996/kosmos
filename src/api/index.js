@@ -12,7 +12,7 @@ router.post('/send', (ctx, next) => {
     const CODE = Number((Math.random() * (3 - 0) + 0).toFixed(0));
 
     ctx.body = {
-        code: 0
+        code: CODE
     };
 });
 
