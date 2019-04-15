@@ -42,7 +42,7 @@ describe('Route tests', function () {
     it('/send', (done) => {
         agent
             .post('/send')
-            .send({template: 'test'})
+            .send({template: 'test' })
             .then(res => expect(res).to.have.status(200))
             .then(() => done())
             .catch(err => done(err));

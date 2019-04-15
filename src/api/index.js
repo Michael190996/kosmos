@@ -9,7 +9,10 @@ const koa = new Koa();
 const router = new KoaRouter();
 
 router.post('/send', (ctx, next) => {
+    const {ids: IDS, text: MESSAGE} = ctx.request.body;
     const CODE = Number((Math.random() * (3 - 0) + 0).toFixed(0));
+
+    console.log(IDS, MESSAGE);
 
     ctx.body = {
         code: CODE

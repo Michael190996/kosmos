@@ -6,7 +6,7 @@ import logger from './logger';
 class Notification {
     constructor(max = 300) {
         this._busy = false;
-        this._message = null;
+        this._messages = [];
         this._max = max;
         this._time = 1000;
         this._count = 3;
@@ -29,7 +29,7 @@ class Notification {
             .map(e => e.id);
     }
 
-    async _shiftPlayersById(ids) {
+    async _removePlayersFromStack(ids) {
         await Players.updateMany({
             id: {
                 $in: ids
@@ -41,19 +41,20 @@ class Notification {
         });
     }
 
-    async _shiftMessageById(id) {
+    async _shiftMessageFromStack() {
+        const {_id: ID} = this._messages.shift();
+
         await Queue.remove({
-            _id: id
+            _id: ID
         });
     }
 
-    _getMessageFromStack() {
-        return Queue.findOne({}).skip(0).limit(1);
+    _getMessagesFromStack() {
+        return Queue.find({}).sort({createAt: -1});
     }
 
     async send(message) {
         await Queue.create({message});
-
         this.resume();
     }
 
@@ -64,21 +65,26 @@ class Notification {
         }
 
         this._busy = true;
-        this._message = await this._getMessageFromStack();
 
-        if (!this._message) {
+        if (!this._messages.length) {
+            this._messages = await this._getMessagesFromStack();
+        }
+
+        if (!this._messages.length) {
             this._busy = false;
             logger.info('server stop', 'message of undefined');
             return false;
         }
 
+        const MESSAGE = this._messages[0];
         const COUNT = this._max * this._count - this._stack.length;
+
         if (COUNT) {
-            this._stack = this._stack.concat(await this._getPlayersFromStack(new Date(this._message.createdAt), this._stack, COUNT));
+            this._stack = this._stack.concat(await this._getPlayersFromStack(new Date(MESSAGE.createdAt), this._stack, COUNT));
         }
 
         if (!this._stack.length) {
-            await this._shiftMessageById(this._message._id);
+            await this._shiftMessageFromStack();
             this._busy = false;
             this.resume();
             return false;
@@ -102,7 +108,7 @@ class Notification {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         ids,
-                        text: this._message
+                        text: MESSAGE.message
                     })
                 }).then(res => res.json());
 
@@ -119,9 +125,9 @@ class Notification {
 
         // invalid
         if (RESULT.find(({code}) => code === 3)) {
-            logger.info('invalid date', this._message.message);
+            logger.info('invalid date', MESSAGE.message);
 
-            await this._shiftMessageById(this._message._id);
+            await this._shiftMessageFromStack();
             this._busy = false;
             this.resume();
             return false;
@@ -136,7 +142,7 @@ class Notification {
 
         if (IDSMESSAGE.length) {
             IDSMESSAGE.forEach(id => this._stack.splice(this._stack.findIndex(e => e === id), 1));
-            await this._shiftPlayersById(IDSMESSAGE);
+            await this._removePlayersFromStack(IDSMESSAGE);
         }
 
         // server error
